@@ -1,0 +1,6 @@
+{
+  "id": "sample-approved-1",
+  "subject": "Action items",
+  "approved": true,
+  "body": "Action: Complete the pipeline hygiene report | Owner: Maya Chen | Start date: 2026-10-02 | End date: 2026-10-05 | Owner's email address: maya.chen@example.com\nAction: Complete the renewal-risk review | Owner: Daniel Ross | Start date: 2026-10-01 | End date: 2026-10-02 | Owner's email address: daniel.ross@example.com\nAction: Finalize the forecast assumptions | Owner: Maya Chen | Start date: 2026-10-05 | End date: 2026-10-09 | Owner's email address: maya.chen@example.com\nAction: Complete the customer handoff checklist | Owner: missing information | Start date: 2026-10-05 | End date: missing information | Owner's email address: missing information"
+}
