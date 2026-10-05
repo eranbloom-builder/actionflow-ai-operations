@@ -1,0 +1,17 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {MISSING,emptyState,validDate,formatRows,parseEmail,importEmail,bucket,reminders,changeStatus} from '../core.js';
+import {candidates} from '../fixtures.js';
+const row = {...candidates[0],status:'Not started'};
+const email = {id:'m1',subject:'Action items',body:formatRows(candidates),approved:true};
+test('five-field format round trips and preserves missing information',()=>{const parsed=parseEmail(email.body);assert.equal(parsed.length,4);assert.equal(parsed[3].ownerEmail,MISSING);assert.equal(parsed[0].startDate,'2026-10-02');});
+test('real dates only, including leap-year boundary',()=>{assert.equal(validDate('2026-02-30'),false);assert.equal(validDate('2024-02-29'),true);assert.equal(validDate('2026-02-29'),false);});
+test('malformed order, pipes, blank values and reversed dates are rejected',()=>{assert.throws(()=>parseEmail(email.body.replace('Owner:','Assignee:')));assert.throws(()=>formatRows([{...row,action:'A | B'}]));assert.throws(()=>formatRows([{...row,owner:''}]));assert.throws(()=>formatRows([{...row,endDate:'2026-09-01'}]));});
+test('approval and subject gate prevent writes',()=>{const s=emptyState();assert.throws(()=>importEmail(s,{...email,approved:false}));assert.throws(()=>importEmail(s,{...email,subject:'transaction update'}));assert.equal(s.items.length,0);});
+test('invalid line rolls back the whole batch before any writes',()=>{const s=emptyState();assert.throws(()=>importEmail(s,{...email,body:email.body+'\ninvalid'}));assert.equal(s.items.length,0);assert.equal(s.processedEmails.length,0);});
+test('email retry is idempotent and identical lines in one email are deduplicated',()=>{const s=emptyState();assert.equal(importEmail(s,email).added,4);assert.equal(importEmail(s,email).duplicate,true);assert.equal(s.items.length,4);const t=emptyState();assert.equal(importEmail(t,{...email,body:formatRows([row,row])}).added,1);});
+test('calendar boundaries: overdue, today, day+1, day+7, day+8',()=>{for(const [date,expected] of [['2026-10-04','overdue'],['2026-10-05','today'],['2026-10-06','upcoming'],['2026-10-12','upcoming'],['2026-10-13','later']])assert.equal(bucket({...row,endDate:date},'2026-10-05'),expected);assert.throws(()=>bucket(row,'invalid'));});
+test('closed tasks never enter reminders',()=>{assert.equal(bucket({...row,status:'Completed'},'2026-10-05'),'closed');assert.equal(reminders([{...row,status:'Cancelled'}],'2026-10-05').groups.length,0);});
+test('one reminder per owner; exceptions do not route to fake addresses',()=>{const s=emptyState();importEmail(s,email);const r=reminders(s.items,'2026-10-05');assert.equal(r.groups.length,2);assert.equal(r.groups.find(g=>g.email==='maya.chen@example.com').today.length,1);assert.equal(r.groups.find(g=>g.email==='maya.chen@example.com').upcoming.length,1);assert.equal(r.exceptions.length,1);});
+test('actual status changes emit PM events; no-op and invalid changes do not',()=>{const s=emptyState();importEmail(s,email);const id=s.items[0].id;assert.equal(changeStatus(s,id,'Not started'),null);assert.equal(changeStatus(s,id,'Completed','2026-10-05T12:00:00Z').from,'Not started');assert.equal(s.events.length,1);assert.throws(()=>changeStatus(s,id,'Unknown'));assert.equal(s.events.length,1);});
+test('browser-rendered text can contain markup without affecting the data contract',()=>{const parsed=parseEmail(formatRows([{...row,action:'Review <forecast> & assumptions'}]));assert.equal(parsed[0].action,'Review <forecast> & assumptions');});
